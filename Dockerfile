@@ -5,8 +5,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build Environment (Optimized dependency caching & static compilation)
 # ------------------------------------------------------------------------------
-FROM golang:1.23-alpine AS builder
-
+FROM golang:1.25-alpine AS builder
 # Install build dependencies for static cross-compilation
 RUN apk add --no-cache git ca-certificates tzdata
 
