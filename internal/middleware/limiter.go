@@ -18,11 +18,15 @@ func rateLimitErrorHandler(c *fiber.Ctx) error {
 	})
 }
 
-// GlobalLimiter enforces a baseline protection layer of 60 requests per minute per IP.
+// GlobalLimiter enforces a baseline protection layer of 60 requests per minute per IP,
+// exempting OPTIONS preflights and healthchecks to prevent false positives in container orchestrators.
 func GlobalLimiter() fiber.Handler {
 	return limiter.New(limiter.Config{
 		Max:        60,
 		Expiration: 1 * time.Minute,
+		Next: func(c *fiber.Ctx) bool {
+			return c.Method() == fiber.MethodOptions || c.Path() == "/health" || c.Path() == "/"
+		},
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.IP()
 		},
@@ -36,6 +40,9 @@ func AuthLimiter() fiber.Handler {
 	return limiter.New(limiter.Config{
 		Max:        5,
 		Expiration: 15 * time.Minute,
+		Next: func(c *fiber.Ctx) bool {
+			return c.Method() == fiber.MethodOptions
+		},
 		KeyGenerator: func(c *fiber.Ctx) string {
 			return c.IP()
 		},
@@ -49,6 +56,9 @@ func AttendanceLimiter() fiber.Handler {
 	return limiter.New(limiter.Config{
 		Max:        3,
 		Expiration: 10 * time.Second,
+		Next: func(c *fiber.Ctx) bool {
+			return c.Method() == fiber.MethodOptions
+		},
 		KeyGenerator: func(c *fiber.Ctx) string {
 			// Prioritize authenticated student UUID if present in request context
 			if userID, ok := c.Locals("user_id").(string); ok && userID != "" {

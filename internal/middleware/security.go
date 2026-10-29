@@ -8,12 +8,13 @@ import (
 // to protect against Clickjacking, MIME confusion, XSS, and unauthorized hardware access.
 func SecurityHeaders() fiber.Handler {
 	const (
-		xFrameOptions           = "DENY"
-		xContentTypeOptions     = "nosniff"
-		crossOriginOpenerPolicy = "same-origin"
-		hsts                    = "max-age=63072000; includeSubDomains; preload"
-		permissionsPolicy       = "camera=(self), geolocation=(self), microphone=(), payment=()"
-		contentSecurityPolicy   = "default-src 'self'; script-src 'self' 'unsafe-inline' https://vercel.live; connect-src 'self' https://*.supabase.co https://*.pooler.supabase.com wss://*.supabase.co; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none';"
+		xFrameOptions             = "DENY"
+		xContentTypeOptions       = "nosniff"
+		crossOriginOpenerPolicy   = "same-origin"
+		crossOriginResourcePolicy = "cross-origin"
+		hsts                      = "max-age=63072000; includeSubDomains; preload"
+		permissionsPolicy         = "camera=(self), geolocation=(self), microphone=(), payment=()"
+		contentSecurityPolicy     = "default-src 'self'; script-src 'self' 'unsafe-inline' https://vercel.live; connect-src 'self' https://*.supabase.co https://*.pooler.supabase.com wss://*.supabase.co; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none';"
 	)
 
 	return func(c *fiber.Ctx) error {
@@ -23,6 +24,8 @@ func SecurityHeaders() fiber.Handler {
 		c.Set("X-Content-Type-Options", xContentTypeOptions)
 		// Cross-Origin Opener Policy (COOP) isolation
 		c.Set("Cross-Origin-Opener-Policy", crossOriginOpenerPolicy)
+		// Cross-Origin Resource Policy (allows Vercel frontend to consume backend resources)
+		c.Set("Cross-Origin-Resource-Policy", crossOriginResourcePolicy)
 		// HTTP Strict Transport Security (HSTS)
 		c.Set("Strict-Transport-Security", hsts)
 		// First-party hardware enforcement (Camera & Geolocation allowed for Hader-V2)

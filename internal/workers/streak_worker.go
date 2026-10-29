@@ -47,11 +47,12 @@ func RunStreakRecalculation(ctx context.Context, repo sessions.Repository) (int6
 }
 
 // DurationUntilNextRun calculates time duration until the specified hour and minute.
+// Uses AddDate(0, 0, 1) to remain resilient across daylight saving transitions (DST).
 func DurationUntilNextRun(targetHour, targetMinute int) time.Duration {
 	now := time.Now()
 	next := time.Date(now.Year(), now.Month(), now.Day(), targetHour, targetMinute, 0, 0, now.Location())
-	if !now.Before(next) {
-		next = next.Add(24 * time.Hour)
+	for !next.After(now) {
+		next = next.AddDate(0, 0, 1)
 	}
 	return next.Sub(now)
 }

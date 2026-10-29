@@ -26,8 +26,9 @@ bin/
 *.dylib
 server
 /server
-api
+/api
 api.exe
+!cmd/api/
 
 # ------------------------------------------------------------------------------
 # 3. Dependencies, Caches & Temporary Files

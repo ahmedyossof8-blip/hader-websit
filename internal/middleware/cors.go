@@ -55,8 +55,9 @@ func StrictCORS(allowedOrigin string) fiber.Handler {
 		c.Set("Access-Control-Allow-Origin", origin)
 		c.Set("Vary", "Origin")
 		c.Set("Access-Control-Allow-Credentials", "true")
-		c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Device-Id, X-Requested-With, Cache-Control")
+		c.Set("Access-Control-Allow-Headers", "Origin, Content-Type, Accept, Authorization, X-Device-Id, X-Requested-With, Cache-Control, Baggage, Sentry-Trace, Traceparent, Idempotency-Key")
 		c.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+		c.Set("Access-Control-Expose-Headers", "Content-Length, Content-Type, Date")
 		c.Set("Access-Control-Max-Age", "86400")
 
 		// Handle preflight OPTIONS request

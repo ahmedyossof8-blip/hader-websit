@@ -30,49 +30,53 @@ func (c *Config) IsProduction() bool {
 // It executes mandatory validation and provides secure fallback defaults for development
 // while strictly enforcing critical credentials in production.
 func LoadConfig() *Config {
-	// Attempt to load .env file; silently ignore if absent (e.g. in cloud or CI/CD environments)
+	// Attempt to load .env file; silently ignore if absent (e.g. in Fly.io / Docker / cloud environments)
 	if err := godotenv.Load(); err != nil {
 		log.Println("[CONFIG] Notice: No .env file loaded; utilizing system environment variables.")
 	}
 
 	appEnv := strings.TrimSpace(os.Getenv("APP_ENV"))
 	if appEnv == "" {
-		appEnv = "development"
+		if os.Getenv("FLY_APP_NAME") != "" {
+			appEnv = "production"
+		} else {
+			appEnv = "development"
+		}
 	}
 	isProd := strings.EqualFold(appEnv, "production")
 
-	// 1. Port with standard 8080 default
+	// 1. Port with standard 8080 default (Fly.io passes PORT dynamically)
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "8080"
 	}
 
-	// 2. Database URL with production guard and local development fallback
+	// 2. Database URL: Cleanly read DATABASE_URL
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if databaseURL == "" {
 		if isProd {
-			log.Fatal("[FATAL CONFIG] Mandatory environment variable missing: DATABASE_URL. Please specify a valid Supabase PostgreSQL connection string.")
+			log.Println("[CONFIG ERROR] Mandatory environment variable missing: DATABASE_URL. Please set DATABASE_URL secret on Fly.io (e.g. fly secrets set DATABASE_URL=...).")
 		} else {
 			databaseURL = "postgres://postgres:postgres@localhost:5432/hader_db?sslmode=disable"
-			log.Println("[CONFIG] Notice: DATABASE_URL not supplied; defaulting to local PostgreSQL fallback.")
+			log.Println("[CONFIG] Notice: DATABASE_URL not supplied; defaulting to local PostgreSQL development fallback.")
 		}
 	}
 
-	// 3. JWT Secret: Support both JWT_SECRET and SUPABASE_JWT_SECRET
-	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
-	if jwtSecret == "" {
-		jwtSecret = strings.TrimSpace(os.Getenv("SUPABASE_JWT_SECRET"))
+	// 3. Supabase JWT Secret: Support SUPABASE_JWT_SECRET and legacy JWT_SECRET
+	supabaseJWTSecret := strings.TrimSpace(os.Getenv("SUPABASE_JWT_SECRET"))
+	if supabaseJWTSecret == "" {
+		supabaseJWTSecret = strings.TrimSpace(os.Getenv("JWT_SECRET"))
 	}
-	if jwtSecret == "" {
+	if supabaseJWTSecret == "" {
 		if isProd {
-			log.Fatal("[FATAL CONFIG] Mandatory environment variable missing: JWT_SECRET (or SUPABASE_JWT_SECRET). Required for in-memory JWT authentication.")
+			log.Println("[CONFIG ERROR] Mandatory environment variable missing: SUPABASE_JWT_SECRET. Required for in-memory JWT authentication. Please set on Fly.io (e.g. fly secrets set SUPABASE_JWT_SECRET=...).")
 		} else {
-			jwtSecret = "hader-v2-dev-fallback-secret-minimum-32-chars-long!"
-			log.Println("[CONFIG] WARNING: Utilizing default development JWT secret. Set JWT_SECRET in production!")
+			supabaseJWTSecret = "hader-v2-dev-fallback-secret-minimum-32-chars-long!"
+			log.Println("[CONFIG] WARNING: Utilizing default development JWT secret. Set SUPABASE_JWT_SECRET in production!")
 		}
 	}
 
-	// 4. Allowed Origins for CORS whitelist
+	// 4. Allowed Origins for CORS whitelist (strictly includes https://hader-v2.vercel.app)
 	allowedOrigin := strings.TrimSpace(os.Getenv("ALLOWED_ORIGIN"))
 	if allowedOrigin == "" {
 		allowedOrigin = "https://hader-v2.vercel.app,*.vercel.app,http://localhost:3000,http://localhost:5173"
@@ -87,12 +91,11 @@ func LoadConfig() *Config {
 		Port:                   port,
 		AppEnv:                 appEnv,
 		DatabaseURL:            databaseURL,
-		JWTSecret:              jwtSecret,
-		SupabaseJWTSecret:      jwtSecret,
+		JWTSecret:              supabaseJWTSecret,
+		SupabaseJWTSecret:      supabaseJWTSecret,
 		AllowedOrigin:          allowedOrigin,
 		SupabaseURL:            supabaseURL,
 		SupabaseAnonKey:        supabaseAnonKey,
 		SupabaseServiceRoleKey: supabaseServiceRoleKey,
 	}
 }
-
