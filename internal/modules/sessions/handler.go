@@ -25,49 +25,58 @@ func NewHandler(service Service, jwtSecret string) *Handler {
 	}
 }
 
-// RegisterRoutes registers all session management, SSE streams, and schedule endpoints.
+// RegisterRoutes registers endpoints on the sessions router group (/api/v1/sessions).
+// Uses relative sub-paths without repeating "/sessions".
 func (h *Handler) RegisterRoutes(router fiber.Router) {
-	// Sessions group: /api/v1/sessions
-	sessions := router.Group("/sessions")
-
-	sessions.Post("/",
+	// POST /api/v1/sessions (handles both with and without trailing slash)
+	router.Post("/",
+		middleware.Authenticate(h.jwtSecret),
+		middleware.RequireRole("class_leader", "admin"),
+		h.CreateSession,
+	)
+	router.Post("",
 		middleware.Authenticate(h.jwtSecret),
 		middleware.RequireRole("class_leader", "admin"),
 		h.CreateSession,
 	)
 
-	sessions.Get("/active",
+	// GET /api/v1/sessions/active
+	router.Get("/active",
 		middleware.Authenticate(h.jwtSecret),
 		h.GetActiveSession,
 	)
 
-	sessions.Put("/:id/close",
+	// PUT /api/v1/sessions/:id/close
+	router.Put("/:id/close",
 		middleware.Authenticate(h.jwtSecret),
 		middleware.RequireRole("class_leader", "admin"),
 		h.CloseSession,
 	)
 
-	sessions.Get("/:id/stream-qr",
+	// GET /api/v1/sessions/:id/stream-qr
+	router.Get("/:id/stream-qr",
 		middleware.Authenticate(h.jwtSecret),
 		middleware.RequireRole("class_leader", "admin"),
 		h.StreamDynamicQR,
 	)
 
-	sessions.Get("/:id/stream-attendees",
+	// GET /api/v1/sessions/:id/qr-stream (alias)
+	router.Get("/:id/qr-stream",
+		middleware.Authenticate(h.jwtSecret),
+		middleware.RequireRole("class_leader", "admin"),
+		h.StreamDynamicQR,
+	)
+
+	// GET /api/v1/sessions/:id/stream-attendees
+	router.Get("/:id/stream-attendees",
 		middleware.Authenticate(h.jwtSecret),
 		middleware.RequireRole("class_leader", "admin"),
 		h.StreamLiveAttendees,
 	)
-
-	// Timetable group: /api/v1/schedule
-	schedule := router.Group("/schedule")
-	schedule.Get("/today",
-		middleware.Authenticate(h.jwtSecret),
-		h.GetTodaySchedule,
-	)
 }
 
 // CreateSession initiates a new lecture session.
+// Maps to POST /api/v1/sessions
 func (h *Handler) CreateSession(c *fiber.Ctx) error {
 	leaderIDStr := middleware.GetUserID(c)
 	leaderID, err := uuid.Parse(leaderIDStr)
@@ -110,6 +119,7 @@ func (h *Handler) CreateSession(c *fiber.Ctx) error {
 }
 
 // CloseSession prematurely or manually terminates an active lecture session.
+// Maps to PUT /api/v1/sessions/:id/close
 func (h *Handler) CloseSession(c *fiber.Ctx) error {
 	sessionIDParam := c.Params("id")
 	sessionID, err := uuid.Parse(sessionIDParam)
@@ -144,6 +154,7 @@ func (h *Handler) CloseSession(c *fiber.Ctx) error {
 }
 
 // GetActiveSession returns the ongoing lecture session for a department.
+// Maps to GET /api/v1/sessions/active
 func (h *Handler) GetActiveSession(c *fiber.Ctx) error {
 	var deptID int
 	if deptStr := c.Query("department_id"); deptStr != "" {
@@ -188,6 +199,7 @@ func (h *Handler) GetActiveSession(c *fiber.Ctx) error {
 }
 
 // StreamDynamicQR opens an SSE connection streaming 5-second dynamic TOTP tokens.
+// Maps to GET /api/v1/sessions/:id/stream-qr
 func (h *Handler) StreamDynamicQR(c *fiber.Ctx) error {
 	sessionIDParam := c.Params("id")
 	sessionID, err := uuid.Parse(sessionIDParam)
@@ -221,6 +233,7 @@ func (h *Handler) StreamDynamicQR(c *fiber.Ctx) error {
 }
 
 // StreamLiveAttendees opens an SSE connection broadcasting live attendee counts and check-in records.
+// Maps to GET /api/v1/sessions/:id/stream-attendees
 func (h *Handler) StreamLiveAttendees(c *fiber.Ctx) error {
 	sessionIDParam := c.Params("id")
 	sessionID, err := uuid.Parse(sessionIDParam)
@@ -254,6 +267,7 @@ func (h *Handler) StreamLiveAttendees(c *fiber.Ctx) error {
 }
 
 // GetTodaySchedule retrieves the student's daily lecture timetable and attendance statuses.
+// Maps to GET /api/v1/schedule/today
 func (h *Handler) GetTodaySchedule(c *fiber.Ctx) error {
 	studentIDStr := middleware.GetUserID(c)
 	studentID, err := uuid.Parse(studentIDStr)

@@ -9,13 +9,16 @@ import (
 )
 
 // CreateSessionRequest captures parameters to initiate a lecture session.
+// Matches exact JSON payload from frontend:
+// subject_name (string), instructor_name (string), department_id (int),
+// geofence_lat (float64), geofence_lng (float64), geofence_radius (float64), duration_minutes (int).
 type CreateSessionRequest struct {
 	SubjectName     string  `json:"subject_name"`
 	InstructorName  string  `json:"instructor_name"`
 	DepartmentID    int     `json:"department_id"`
 	GeofenceLat     float64 `json:"geofence_lat"`
 	GeofenceLng     float64 `json:"geofence_lng"`
-	GeofenceRadius  int     `json:"geofence_radius"`
+	GeofenceRadius  float64 `json:"geofence_radius"`
 	DurationMinutes int     `json:"duration_minutes"`
 }
 
@@ -44,7 +47,7 @@ func (r *CreateSessionRequest) Validate() error {
 	}
 
 	if r.GeofenceRadius <= 0 {
-		r.GeofenceRadius = 40 // default 40 meters
+		r.GeofenceRadius = 40.0 // default 40 meters
 	}
 
 	if r.DurationMinutes < 15 || r.DurationMinutes > 240 {

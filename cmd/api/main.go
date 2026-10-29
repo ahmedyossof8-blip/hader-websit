@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
@@ -22,6 +23,7 @@ import (
 	"hader-backend/internal/middleware"
 	"hader-backend/internal/modules/attendance"
 	"hader-backend/internal/modules/auth"
+	"hader-backend/internal/modules/schedule"
 	"hader-backend/internal/modules/sessions"
 	"hader-backend/internal/workers"
 )
@@ -56,10 +58,13 @@ func main() {
 	}
 	defer database.CloseDB(pool)
 
-	// 4. Initialize Go Fiber Application with optimized zero-allocation error handler
+	// 4. Initialize Go Fiber Application with CaseSensitive=false and StrictRouting=false
+	// Eliminates 405/404 errors caused by trailing slash variations or letter cases
 	app := fiber.New(fiber.Config{
-		AppName:      "Hader-V2 Academic Attendance Engine",
-		ServerHeader: "Hader-Engine",
+		AppName:       "Hader-V2 Academic Attendance Engine",
+		ServerHeader:  "Hader-Engine",
+		StrictRouting: false, // Prevents 405/404 errors if requests have a trailing slash (e.g., /auth/login vs /auth/login/)
+		CaseSensitive: false,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			var fiberErr *fiber.Error
@@ -90,8 +95,24 @@ func main() {
 		TimeFormat: "2006-01-02 15:04:05",
 	}))
 
-	// 3) Strict CORS Whitelist: Handles OPTIONS preflight requests & allows https://hader-v2.vercel.app
-	app.Use(middleware.StrictCORS(cfg.AllowedOrigin))
+	// 3) Strict CORS & OPTIONS Preflight Configuration
+	// Automatically responds to OPTIONS preflights with 204 No Content before routing
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "https://hader-v2.vercel.app, https://*.vercel.app, http://localhost:5173",
+		AllowOriginsFunc: func(origin string) bool {
+			if origin == "https://hader-v2.vercel.app" || origin == "http://localhost:5173" || origin == "http://localhost:3000" {
+				return true
+			}
+			if strings.HasSuffix(origin, ".vercel.app") {
+				return true
+			}
+			return false
+		},
+		AllowMethods:     "GET,POST,PUT,DELETE,PATCH,OPTIONS",
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, X-Device-Id, Baggage, Sentry-Trace, X-Requested-With, Cache-Control, Traceparent",
+		AllowCredentials: true,
+		MaxAge:           86400,
+	}))
 
 	// 4) Production Security Headers: Anti-clickjacking, HSTS, camera/geolocation permissions
 	app.Use(middleware.SecurityHeaders())
@@ -166,12 +187,26 @@ func main() {
 	sessionService := sessions.NewService(sessionRepo)
 	sessionHandler := sessions.NewHandler(sessionService, supabaseJWTSecret)
 
-	// API v1 Routing
+	scheduleHandler := schedule.NewHandler(sessionService, supabaseJWTSecret)
+
+	// API v1 Routing Realignment (Exact Match to Frontend Endpoints Registry)
 	api := app.Group("/api/v1")
+
+	// 1. Auth Group (/api/v1/auth)
 	authGroup := api.Group("/auth")
 	authHandler.RegisterRoutes(authGroup)
-	attendanceHandler.RegisterRoutes(api)
-	sessionHandler.RegisterRoutes(api)
+
+	// 2. Attendance Group (/api/v1/attendance)
+	attendanceGroup := api.Group("/attendance")
+	attendanceHandler.RegisterRoutes(attendanceGroup)
+
+	// 3. Sessions Group (/api/v1/sessions)
+	sessionsGroup := api.Group("/sessions")
+	sessionHandler.RegisterRoutes(sessionsGroup)
+
+	// 4. Schedule Group (/api/v1/schedule)
+	scheduleGroup := api.Group("/schedule")
+	scheduleHandler.RegisterRoutes(scheduleGroup)
 
 	// Diagnostic protected ping verifying JWT pipeline end-to-end
 	authGroup.Get("/protected-ping", middleware.Authenticate(supabaseJWTSecret), func(c *fiber.Ctx) error {

@@ -9,7 +9,7 @@ import (
 	"hader-backend/internal/middleware"
 )
 
-// Handler handles HTTP requests for lecture attendance and dynamic QR token broadcasting.
+// Handler handles HTTP requests for lecture attendance and check-in verification.
 type Handler struct {
 	service   Service
 	jwtSecret string
@@ -23,35 +23,27 @@ func NewHandler(service Service, jwtSecret string) *Handler {
 	}
 }
 
-// RegisterRoutes registers endpoints for student check-ins and leader QR feeds.
+// RegisterRoutes registers endpoints on the attendance router group (/api/v1/attendance).
+// Uses relative sub-paths without repeating "/attendance".
 func (h *Handler) RegisterRoutes(router fiber.Router) {
-	// Attendance group: /api/v1/attendance
-	attGroup := router.Group("/attendance")
-	attGroup.Post("/check-in",
+	router.Post("/check-in",
 		middleware.Authenticate(h.jwtSecret),
 		middleware.AttendanceLimiter(),
 		h.CheckIn,
 	)
-	attGroup.Post("/sync-offline",
+	router.Get("/history/me",
+		middleware.Authenticate(h.jwtSecret),
+		h.History,
+	)
+	router.Post("/sync-offline",
 		middleware.Authenticate(h.jwtSecret),
 		middleware.AttendanceLimiter(),
 		h.SyncOffline,
 	)
-	attGroup.Get("/history/me",
-		middleware.Authenticate(h.jwtSecret),
-		h.GetMyHistory,
-	)
-
-	// Sessions group: /api/v1/sessions
-	sessionsGroup := router.Group("/sessions")
-	sessionsGroup.Get("/:id/qr-stream",
-		middleware.Authenticate(h.jwtSecret),
-		middleware.RequireRole("class_leader", "admin"),
-		h.GetDynamicQR,
-	)
 }
 
 // CheckIn processes dynamic QR scans, GPS geofencing, and atomic check-in locks.
+// Maps to POST /api/v1/attendance/check-in
 func (h *Handler) CheckIn(c *fiber.Ctx) error {
 	studentIDStr := middleware.GetUserID(c)
 	studentID, err := uuid.Parse(studentIDStr)
@@ -123,45 +115,13 @@ func (h *Handler) CheckIn(c *fiber.Ctx) error {
 	})
 }
 
-// GetDynamicQR supplies Class Leaders and Instructors with real-time rotating TOTP codes.
-func (h *Handler) GetDynamicQR(c *fiber.Ctx) error {
-	sessionIDParam := c.Params("id")
-	sessionID, err := uuid.Parse(sessionIDParam)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"error": fiber.Map{
-				"code":    "INVALID_SESSION_ID",
-				"message": "Provided session identifier is not a valid UUID",
-			},
-		})
-	}
-
-	leaderIDStr := middleware.GetUserID(c)
-	leaderID, _ := uuid.Parse(leaderIDStr)
-
-	resp, err := h.service.GetDynamicQRForLeader(c.Context(), leaderID, sessionID)
-	if err != nil {
-		status := fiber.StatusBadRequest
-		if errors.Is(err, ErrSessionNotActive) {
-			status = fiber.StatusNotFound
-		}
-		return c.Status(status).JSON(fiber.Map{
-			"success": false,
-			"error": fiber.Map{
-				"code":    "QR_FETCH_FAILED",
-				"message": err.Error(),
-			},
-		})
-	}
-
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"success": true,
-		"data":    resp,
-	})
+// History returns historical attendance logs for the authenticated student.
+// Maps to GET /api/v1/attendance/history/me
+func (h *Handler) History(c *fiber.Ctx) error {
+	return h.GetMyHistory(c)
 }
 
-// GetMyHistory returns historical attendance logs for the authenticated student.
+// GetMyHistory returns historical attendance logs (alias of History for backward compatibility).
 func (h *Handler) GetMyHistory(c *fiber.Ctx) error {
 	studentIDStr := middleware.GetUserID(c)
 	studentID, err := uuid.Parse(studentIDStr)
@@ -193,6 +153,7 @@ func (h *Handler) GetMyHistory(c *fiber.Ctx) error {
 }
 
 // SyncOffline validates and batch-syncs cryptographically signed offline attendance proofs.
+// Maps to POST /api/v1/attendance/sync-offline
 func (h *Handler) SyncOffline(c *fiber.Ctx) error {
 	studentIDStr := middleware.GetUserID(c)
 	studentID, err := uuid.Parse(studentIDStr)

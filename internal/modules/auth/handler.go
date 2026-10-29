@@ -24,16 +24,18 @@ func NewHandler(service Service, jwtSecret string) *Handler {
 	}
 }
 
-// RegisterRoutes hooks the authentication endpoints to Fiber router.
+// RegisterRoutes hooks the authentication endpoints to Fiber router group (/api/v1/auth).
+// Uses relative sub-paths without repeating "/auth".
 func (h *Handler) RegisterRoutes(router fiber.Router) {
-	router.Post("/register", middleware.AuthLimiter(), h.Register)
 	router.Post("/login", middleware.AuthLimiter(), h.Login)
-	router.Post("/recover-password", middleware.AuthLimiter(), h.RecoverPassword)
+	router.Post("/register", middleware.AuthLimiter(), h.Register)
+	router.Get("/me", middleware.Authenticate(h.jwtSecret), h.Me)
 	router.Post("/logout", h.Logout)
-	router.Get("/me", middleware.Authenticate(h.jwtSecret), h.GetMe)
+	router.Post("/recover-password", middleware.AuthLimiter(), h.RecoverPassword)
 }
 
 // Register handles student onboarding with device binding and terms verification.
+// Maps to POST /api/v1/auth/register
 func (h *Handler) Register(c *fiber.Ctx) error {
 	var req RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -80,6 +82,7 @@ func (h *Handler) Register(c *fiber.Ctx) error {
 }
 
 // Login handles dual-mode student/class-leader authentication with hardware lock enforcement.
+// Maps to POST /api/v1/auth/login
 func (h *Handler) Login(c *fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -146,6 +149,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 }
 
 // RecoverPassword dispatches password reset email.
+// Maps to POST /api/v1/auth/recover-password
 func (h *Handler) RecoverPassword(c *fiber.Ctx) error {
 	var req PasswordRecoveryRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -168,6 +172,7 @@ func (h *Handler) RecoverPassword(c *fiber.Ctx) error {
 }
 
 // Logout clears the refresh token cookie and terminates the session.
+// Maps to POST /api/v1/auth/logout
 func (h *Handler) Logout(c *fiber.Ctx) error {
 	c.ClearCookie("hader_refresh_token")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -176,7 +181,13 @@ func (h *Handler) Logout(c *fiber.Ctx) error {
 	})
 }
 
-// GetMe retrieves identity details of the currently authenticated student or class leader.
+// Me retrieves identity details of the currently authenticated student or class leader.
+// Maps to GET /api/v1/auth/me
+func (h *Handler) Me(c *fiber.Ctx) error {
+	return h.GetMe(c)
+}
+
+// GetMe retrieves identity details (alias of Me for backward compatibility).
 func (h *Handler) GetMe(c *fiber.Ctx) error {
 	uidStr := middleware.GetUserID(c)
 	uid, err := uuid.Parse(uidStr)
