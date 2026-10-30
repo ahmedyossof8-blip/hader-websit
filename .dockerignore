@@ -1,0 +1,48 @@
+# ==============================================================================
+# HADER-V2: Production Docker Build Ignore Rules
+# Excludes local artifacts, secrets, tests, documentation, and tooling
+# ==============================================================================
+
+# Version Control
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Environment Configurations & Secret Credentials (NEVER bake into image)
+.env
+.env.*
+.env.local
+!.env.example
+
+# Local Build Artifacts & Compiled Binaries
+bin/
+*.exe
+*.test
+*.out
+*.dll
+*.so
+*.dylib
+/server
+tmp/
+.cache/
+
+# Test Suites, Benchmarks, and Logs
+tests/
+*.log
+coverage.*
+*.cov
+
+# Project Documentation, Skills, and IDE Configuration
+.agent/
+.gemini/
+.idea/
+.vscode/
+*.md
+LICENSE
+
+# Orchestration & Local Operational Tools
+Dockerfile
+docker-compose*.yml
+Caddyfile
+Makefile

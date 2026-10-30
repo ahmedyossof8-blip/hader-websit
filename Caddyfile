@@ -1,0 +1,81 @@
+# ==============================================================================
+# HADER-V2: Production Caddy Edge Reverse Proxy Configuration
+# Automatic Let's Encrypt TLS, HTTP/3 (QUIC), Strict Security Headers, and SSE
+# ==============================================================================
+
+{
+    # Disable admin API in production container
+    admin off
+
+    # Enable HTTP/1.1, HTTP/2, and HTTP/3 (QUIC over UDP)
+    servers {
+        protocols h1 h2 h3
+    }
+
+    # Let's Encrypt Production Email Configuration
+    email {$ACME_EMAIL:admin@hader-app.edu.eg}
+}
+
+{$DOMAIN:localhost} {
+    # Modern compression for text payloads
+    encode zstd gzip
+
+    # --------------------------------------------------------------------------
+    # Production Security Headers (OWASP Standards & Browser Sandboxing)
+    # --------------------------------------------------------------------------
+    header {
+        # Strict HSTS (2 Years + Preload)
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        
+        # Anti-MIME Sniffing
+        X-Content-Type-Options "nosniff"
+        
+        # Anti-Clickjacking
+        X-Frame-Options "DENY"
+        
+        # Cross-Origin Policies
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "cross-origin"
+        
+        # Restrict hardware permissions exclusively to first-party app (QR scanner & GPS)
+        Permissions-Policy "camera=(self), geolocation=(self), microphone=()"
+        
+        # Content Security Policy preventing unauthorized script injection
+        Content-Security-Policy "default-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co;"
+        
+        # Strip server signature to avoid version disclosure
+        -Server
+    }
+
+    # --------------------------------------------------------------------------
+    # Reverse Proxy to Go Fiber Backend Container
+    # --------------------------------------------------------------------------
+    reverse_proxy backend:8080 {
+        # Critical: flush_interval -1 enables real-time SSE token & attendee streaming
+        flush_interval -1
+
+        # Preserve client origin IP and transport metadata
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+
+        # Optimized transport pooling for high-concurrency bursts
+        transport http {
+            dial_timeout 5s
+            response_header_timeout 30s
+            keepalive 30s
+            max_idle_conns 1000
+            max_idle_conns_per_host 500
+        }
+    }
+
+    # --------------------------------------------------------------------------
+    # Structured JSON Telemetry Logging
+    # --------------------------------------------------------------------------
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}

@@ -1,0 +1,74 @@
+# ==============================================================================
+# HADER-V2: Production Docker Compose Orchestration
+# Zero-Bloat Go Fiber Engine + Caddy Edge Proxy with HTTP/3 & Automatic Let's Encrypt
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Backend API: Static Go Fiber Engine (< 20MB Alpine Container)
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hader-backend:v2.0.0
+    container_name: hader-backend-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+      - APP_ENV=production
+    # Strict resource bounds demonstrating Go's high-efficiency footprint
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 256M
+        reservations:
+          cpus: "0.20"
+          memory: 64M
+    networks:
+      - hader-internal
+    # Isolated from direct public host ports; routed strictly through Caddy reverse proxy
+
+  # ----------------------------------------------------------------------------
+  # Edge Reverse Proxy: Caddy v2 (Automatic TLS, HTTP/3 QUIC, SSE Stream Flush)
+  # ----------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: hader-caddy-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # Mandatory UDP port for HTTP/3 QUIC transport
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+      - ACME_EMAIL=${ACME_EMAIL:-admin@hader-app.edu.eg}
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - hader-internal
+
+# ------------------------------------------------------------------------------
+# Isolated Bridge Network
+# ------------------------------------------------------------------------------
+networks:
+  hader-internal:
+    name: hader-network
+    driver: bridge
+
+# ------------------------------------------------------------------------------
+# Persistent Volumes for Let's Encrypt Certificates and Caddy State
+# ------------------------------------------------------------------------------
+volumes:
+  caddy_data:
+    name: hader-caddy-data
+  caddy_config:
+    name: hader-caddy-config
