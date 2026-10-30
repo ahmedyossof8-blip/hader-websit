@@ -23,7 +23,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s -extldflags '-static'" \
     -trimpath \
     -tags timetzdata \
-    -o /app/server ./cmd/api/main.go
+    -o /app/server ./cmd/api
 
 # ------------------------------------------------------------------------------
 # Stage 2: Hardened Minimal Runtime (Alpine Linux 3.20, Non-Root UID 10001)
